@@ -44,10 +44,17 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    uchar* image_data = image.data;
     int width = image.rows, height = image.cols;
 
-    grayscale(image_data, width, height);
+    // raw_grayscale(image.data, width, height);
+
+    // example of using mask to do grayscale
+    mask m(50, 50, width - 50, height - 50);
+    m.operate(image.data, width, height, [](pixel& p)
+    {
+        uchar gray = uchar((int(p.r) + int(p.g) + int(p.b))/3);
+        p = gray;
+    });
 
     imwrite("output.jpg", image);
 
