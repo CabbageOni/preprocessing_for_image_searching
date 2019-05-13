@@ -1,6 +1,14 @@
 #include <algorithm>
+#include <pthread.h>
 
 typedef unsigned char uchar;
+
+#define PPFIS_RUN_THREAD(thread, func, parameter) \
+if (err = pthread_create(&thread, nullptr, reinterpret_cast<void*(*)(void*)>(func), reinterpret_cast<void*>(parameter))) \
+    return false
+
+#define PPFIS_WAIT_THREAD(thread, return_target) \
+pthread_join(thread, (void**)return_target)
 
 namespace ppfis
 {
@@ -27,8 +35,21 @@ namespace ppfis
         inline bool operator==(const pixel& rhs) const { return x == rhs.x && y == rhs.y && z == rhs.z; }
     };
 
+    // change this later to masked_image, and contain image pointer too
+    // that way will be more flexible
     class mask
     {
+    private:
+        struct operate_thread_param
+        {
+            uchar* image;
+            int image_height;
+            int left, right, top, bottom;
+            void (*per_pixel_func)(pixel&);
+        };
+
+        static void operate_thread(operate_thread_param* param);
+
     public:
         int border_left = 0;
         int border_top = 0;
@@ -37,40 +58,48 @@ namespace ppfis
 
         inline mask(int width, int height) : border_right(width), border_bottom(height) {}
         inline mask(int border_left, int border_top, int border_right, int border_bottom) :
-        border_left(border_left), border_top(border_top),
-        border_right(border_right), border_bottom(border_bottom)
-        {}
-        void operate(uchar* image, int width, int height, void (*per_pixel_func)(pixel&)) const;
+        border_left(border_left), border_top(border_top), border_right(border_right), border_bottom(border_bottom) {}
+        bool operate(uchar* image, int image_width, int image_height, void (*per_pixel_func)(pixel& current_pixel)) const;
     };
 
-    inline void mask::operate(uchar* image, int width, int height, void (*per_pixel_func)(pixel&)) const
+    inline void mask::operate_thread(mask::operate_thread_param* param)
     {
-        // do nothing if there is no function
-        if (!per_pixel_func) return;
-
-        // map ranges due to borders
-        int right = std::min(std::max(border_left, border_right), width);
-        int left = std::max(std::min(border_left, right), 0);
-        int bottom = std::min(std::max(border_top, border_bottom), height);
-        int top = std::max(std::min(border_top, bottom), 0);
+        uchar*& image = param->image;
+        int& image_height = param->image_height;
+        int& left = param->left, &right = param->right, &top = param->top, &bottom = param->bottom;
+        void (*per_pixel_func)(pixel& current_pixel) = param->per_pixel_func;
 
         for (int r = left; r < right; ++r)
             for (int c = top; c < bottom; ++c)
-                per_pixel_func(*reinterpret_cast<pixel*>(&image[r * height * 3 + c * 3]));
+                per_pixel_func(*reinterpret_cast<pixel*>(&image[r * image_height * 3 + c * 3]));
     }
 
-    // example implementation of raw image processing
-    // example of masking is inside main.cpp!
-    inline void raw_grayscale(uchar* image, int width, int height)
+    inline bool mask::operate(uchar* image, int image_width, int image_height, void (*per_pixel_func)(pixel& current_pixel)) const
     {
-        for (int r = 0; r < width; ++r)
-        {
-            for (int c = 0; c < height; ++c)
-            {
-                pixel& curr_pixel = *reinterpret_cast<pixel*>(&image[r * height * 3 + c * 3]);
-                uchar gray = uchar((int(curr_pixel.r) + int(curr_pixel.g) + int(curr_pixel.b))/3);
-                curr_pixel = gray;
-            }            
-        }
+        // do nothing if there is no function
+        if (!per_pixel_func) return false;
+
+        int err = 0;
+        pthread_t thread_1, thread_2;
+
+        // map ranges due to borders
+        int right = std::min(std::max(border_left, border_right), image_width);
+        int left = std::max(std::min(border_left, right), 0);
+        int bottom = std::min(std::max(border_top, border_bottom), image_height);
+        int top = std::max(std::min(border_top, bottom), 0);
+
+        // temporary division just for two threads, will change later
+        int mid = (left + right) / 2;
+
+        operate_thread_param thread_param_1 = {image,image_height,left,mid,top,bottom,per_pixel_func};
+        operate_thread_param thread_param_2 = {image,image_height,mid,right,top,bottom,per_pixel_func};
+
+        PPFIS_RUN_THREAD(thread_1, &mask::operate_thread, &thread_param_1);
+        PPFIS_RUN_THREAD(thread_2, &mask::operate_thread, &thread_param_2);
+
+        PPFIS_WAIT_THREAD(thread_1, nullptr);
+        PPFIS_WAIT_THREAD(thread_2, nullptr);
+
+        return true;
     }
 }
