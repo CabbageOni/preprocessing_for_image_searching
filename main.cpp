@@ -30,18 +30,38 @@ int main(int argc, char** argv)
     int width = image.rows, height = image.cols;
 
     // example of using mask to do grayscale
-    mask m(50, 50, width - 50, height - 50);
-    m.operate(image.data, width, height, [](pixel& p)
+    mask m(&image.data, width, height);
+    m.set_relative_border(50, 50, 50, 50);
+    m.operate([](pixel& p)
     {
         uchar gray = uchar((int(p.r) + int(p.g) + int(p.b))/3);
         p = gray;
     });
 
     // example of using mask to only show red
-    mask m2(100, 0, width, height - 100);
-    m2.operate(image.data, width, height, [](pixel& p)
+    m.set_relative_border(100, 0, 0, 100);
+    m.operate([](pixel& p)
     {
-        p = {0,0,p.r};
+        p = {p.b,0,p.r};
+    });
+
+    // example of using mask to compute blur
+    m.set_relative_border(0,150,150,0);
+    m.operate([](pixels& op, pixel& np)
+    {
+        int r = 0, g = 0, b = 0;
+        for (int row = -3; row < 4; ++row)
+            for (int col = -3; col < 4; ++col)
+            {
+                pixel& p = op[row][col];
+                // below is same as above, more efficient. consider using this
+                // pixel& p = op.at(row, col);
+                r += p.r;
+                g += p.g;
+                b += p.b;
+            }
+        
+        np = pixel(b/49, g/49, r/49);
     });
 
     imwrite("output.jpg", image);
