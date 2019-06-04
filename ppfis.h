@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <pthread.h>
-#include <vector>
 #include <tuple>
 
 typedef unsigned char uchar;
@@ -220,37 +219,37 @@ namespace ppfis
     }
 
     // Simple thread managing class
-    template <typename ... parameters>
+    template <int max_thread_count = 5, typename ... parameters>
     class simple_thread
     {
     private:
-        std::vector<pthread_t> m_threads;
-
-        template <typename ... T>
-        struct VariadicStruct {};
-
-        template<typename T, typename ... Rest>
-        struct VariadicStruct<T, Rest ...>
+        pthread_t m_threads[max_thread_count];
+        struct thread_parameter
         {
-            VariadicStruct(const T& first, const Rest& ... rest) : first(first), rest(rest...) {}
+            void (*func)(parameters...);
+            std::tuple<parameters...> params;
+        } m_thread_parameters[max_thread_count];
+        size_t m_current_thread = 0;
 
-            T first;
-            VariadicStruct<Rest...> rest;
-        };
+        static inline void run_thread(void* param)
+        {
+            thread_parameter* p = reinterpret_cast<thread_parameter*>(param);
+            std::apply(p->func, p->params);
+        }
 
     public:
-        // Lock is not garunteed, proceed with caution with shaed variables!
+        // Lock is not garunteed, proceed with caution with shared variables!
         inline bool run(void (*func)(parameters...), parameters ... params)
         {
-            std::tuple<parameters...> tuple = std::forward_as_tuple(params...);
-
-            //VariadicStruct<parameters...> ST;
-
-            pthread_t thread;
-            if(pthread_create(&thread, nullptr, reinterpret_cast<void*(*)(void*)>(func), &tuple))
+            if (m_current_thread == max_thread_count)
                 return false;
 
-            m_threads.emplace_back(thread);
+            m_thread_parameters[m_current_thread] = { func, std::forward_as_tuple(params...) };
+
+            if(pthread_create(&m_threads[m_current_thread], nullptr, reinterpret_cast<void*(*)(void*)>(run_thread), &m_thread_parameters[m_current_thread]))
+                return false;
+
+            ++m_current_thread;
             return true;   
         }
 
@@ -258,8 +257,10 @@ namespace ppfis
         // If needed, utilized parameters instead.
         inline void wait()
         {
-            for (pthread_t& p : m_threads)
-                pthread_join(p, nullptr);
+            for (size_t i = 0; i < m_current_thread; ++i)
+                pthread_join(m_threads[i], nullptr);
+
+            m_current_thread = 0;
         }
     };
 }
