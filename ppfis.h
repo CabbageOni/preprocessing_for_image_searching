@@ -1,5 +1,7 @@
 #include <algorithm>
 #include <pthread.h>
+#include <vector>
+#include <tuple>
 
 typedef unsigned char uchar;
 
@@ -81,7 +83,7 @@ namespace ppfis
         friend pixels;
 
     public:
-        inline pixel& operator[](int relative_column)
+        inline const pixel& operator[](int relative_column)
         {
             int row = std::max(0,std::min(m_mask_ptr->m_image_width, m_current_row));
             int column = std::max(0,std::min(m_mask_ptr->m_image_height, m_current_column + relative_column));
@@ -100,7 +102,7 @@ namespace ppfis
 
         friend mask;
     public:
-        inline pixel& at(int relative_row, int relative_column)
+        inline const pixel& at(int relative_row, int relative_column)
         {
             int row = std::max(0,std::min(m_mask_ptr->m_image_width, m_current_row + relative_row));
             int column = std::max(0,std::min(m_mask_ptr->m_image_height, m_current_column + relative_column));
@@ -204,4 +206,60 @@ namespace ppfis
         delete[] new_image;
         return true;
     }
+
+    //example of built-in grayscale function
+    inline void grayscale(uchar** image, int image_width, int image_height)
+    {
+        mask m(image, image_width, image_height);
+        m.set_relative_border(50, 50, 50, 50);
+        m.operate([](pixel& p)
+        {
+            uchar gray = uchar((int(p.r) + int(p.g) + int(p.b))/3);
+            p = gray;
+        });
+    }
+
+    // Simple thread managing class
+    template <typename ... parameters>
+    class simple_thread
+    {
+    private:
+        std::vector<pthread_t> m_threads;
+
+        template <typename ... T>
+        struct VariadicStruct {};
+
+        template<typename T, typename ... Rest>
+        struct VariadicStruct<T, Rest ...>
+        {
+            VariadicStruct(const T& first, const Rest& ... rest) : first(first), rest(rest...) {}
+
+            T first;
+            VariadicStruct<Rest...> rest;
+        };
+
+    public:
+        // Lock is not garunteed, proceed with caution with shaed variables!
+        inline bool run(void (*func)(parameters...), parameters ... params)
+        {
+            std::tuple<parameters...> tuple = std::forward_as_tuple(params...);
+
+            //VariadicStruct<parameters...> ST;
+
+            pthread_t thread;
+            if(pthread_create(&thread, nullptr, reinterpret_cast<void*(*)(void*)>(func), &tuple))
+                return false;
+
+            m_threads.emplace_back(thread);
+            return true;   
+        }
+
+        // Note that there is no return variable.
+        // If needed, utilized parameters instead.
+        inline void wait()
+        {
+            for (pthread_t& p : m_threads)
+                pthread_join(p, nullptr);
+        }
+    };
 }

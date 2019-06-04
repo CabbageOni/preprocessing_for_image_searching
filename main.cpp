@@ -53,7 +53,7 @@ int main(int argc, char** argv)
         for (int row = -3; row < 4; ++row)
             for (int col = -3; col < 4; ++col)
             {
-                pixel& p = op[row][col];
+                const pixel& p = op[row][col];
                 // below is same as above, more efficient. consider using this
                 // pixel& p = op.at(row, col);
                 r += p.r;
@@ -63,6 +63,14 @@ int main(int argc, char** argv)
         
         np = pixel(b/49, g/49, r/49);
     });
+
+    // example of using simple thread
+    simple_thread<int> t;
+
+    t.run([](int num){ cout << "test " << num << endl; }, 1);
+    t.run([](int num){ cout << "test " << num << endl; }, 2);
+    t.run([](int num){ cout << "test " << num << endl; }, 3);
+    t.wait();
 
     imwrite("output.jpg", image);
 
