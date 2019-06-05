@@ -46,12 +46,15 @@ void built_in_function_examples(mask& m)
 {
     m.set_relative_border(0,0,100,100);
     sobel_operator(m);
-    m.set_relative_border(50,50,50,50);
-    mean_filter(m, 15);
+    //m.set_relative_border(50,50,50,50);
+    //mean_filter(m, 15);
 }
 
 void simple_thread_exmaples()
 {
+    // remove the line below if you want simple_thread examples!
+    return;
+
     cout << "simple thread test 1 ===" << endl;
     simple_thread<3, int> t([](int num){ cout << "test " << num << endl; });
 

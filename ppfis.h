@@ -5,13 +5,6 @@
 
 typedef unsigned char uchar;
 
-#define PPFIS_RUN_THREAD(thread, func, parameter) \
-if (err = pthread_create(&thread, nullptr, reinterpret_cast<void*(*)(void*)>(func), reinterpret_cast<void*>(parameter))) \
-    return false
-
-#define PPFIS_WAIT_THREAD(thread, return_target) \
-pthread_join(thread, (void**)return_target)
-
 namespace ppfis
 {
     // Simple thread managing class
@@ -100,18 +93,12 @@ namespace ppfis
     class mask
     {
     private:
-        struct operate_per_pixel_thread_param
-        {
-            uchar* image;
-            int image_width;
-            int left, right, top, bottom;
-            void (*per_pixel_func)(pixel&);
-        };
+        constexpr static int m_mask_maximum_thread = 8;
 
         uchar** m_image_ptr = nullptr;
         int m_image_width = -1, m_image_height = -1;
 
-        static void operate_per_pixel_thread(operate_per_pixel_thread_param* param);
+        static void operate_per_pixel_thread(pixel* image, int image_width, void (*per_pixel_func)(pixel&), int left, int right, int top, int bottom);
 
         friend pixels;
         friend row_pixels;
@@ -174,16 +161,11 @@ namespace ppfis
         inline row_pixels operator[](int relative_row) const { return row_pixels(m_current_row + relative_row, m_current_column, m_mask_ptr); }
     };
 
-    inline void mask::operate_per_pixel_thread(operate_per_pixel_thread_param* param)
+    inline void mask::operate_per_pixel_thread(pixel* image, int image_width, void (*per_pixel_func)(pixel&), int left, int right, int top, int bottom)
     {
-        uchar*& image = param->image;
-        int& image_width = param->image_width;
-        int& left = param->left, &right = param->right, &top = param->top, &bottom = param->bottom;
-        void (*per_pixel_func)(pixel& current_pixel) = param->per_pixel_func;
-
         for (int c = top; c < bottom; ++c)
             for (int r = left; r < right; ++r)
-                per_pixel_func(reinterpret_cast<pixel*>(image)[c * image_width + r]);
+                per_pixel_func(image[c * image_width + r]);
     }
 
     inline mask::mask(uchar** image_ptr, int image_width, int image_height) : m_image_ptr(image_ptr), m_image_width(image_height), m_image_height(image_width)
@@ -214,27 +196,26 @@ namespace ppfis
     {
         if (!m_image_ptr || !per_pixel_func) return false;
 
-        int err = 0;
-        pthread_t thread_1, thread_2;
-
         // map ranges due to borders
         int right = std::min(std::max(border_left, border_right), m_image_width);
         int left = std::max(std::min(border_left, right), 0);
         int bottom = std::min(std::max(border_top, border_bottom), m_image_height);
         int top = std::max(std::min(border_top, bottom), 0);
 
-        // temporary division just for two threads, will change later
-        // also, make main core run too
-        int mid = (bottom + top) / 2;
+        simple_thread<m_mask_maximum_thread, pixel*, int, void (*)(pixel&), int, int, int, int> t(mask::operate_per_pixel_thread);
 
-        operate_per_pixel_thread_param thread_param_1 = {*m_image_ptr,m_image_width,left,right,top,mid,per_pixel_func};
-        operate_per_pixel_thread_param thread_param_2 = {*m_image_ptr,m_image_width,left,right,mid,bottom,per_pixel_func};
+        pixel* image = reinterpret_cast<pixel*>(*m_image_ptr);
 
-        PPFIS_RUN_THREAD(thread_1, &mask::operate_per_pixel_thread, &thread_param_1);
-        PPFIS_RUN_THREAD(thread_2, &mask::operate_per_pixel_thread, &thread_param_2);
+        // estimate thread count
+        int concurrent_operation_count = bottom - top > m_mask_maximum_thread + 1 ? m_mask_maximum_thread + 1 : 1;
+        int height_per_thread = (bottom - top) / concurrent_operation_count;
 
-        PPFIS_WAIT_THREAD(thread_1, nullptr);
-        PPFIS_WAIT_THREAD(thread_2, nullptr);
+        // run threads
+        for (int i = 0; i < concurrent_operation_count - 1; ++i)
+            t.run(image, m_image_width, per_pixel_func, left, right, top + height_per_thread * i, top + height_per_thread * (i + 1));
+        operate_per_pixel_thread(image, m_image_width, per_pixel_func, left, right, top + height_per_thread * (concurrent_operation_count - 1), bottom);
+
+        t.wait();
 
         return true;
     }
@@ -318,7 +299,6 @@ namespace ppfis
         return true;
     }
 
-    //example of built-in grayscale function
     inline void grayscale(mask& m)
     {
         m.operate([](pixel& p)
