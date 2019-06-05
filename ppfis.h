@@ -349,6 +349,7 @@ namespace ppfis
         {
             int r = 0, g = 0, b = 0;
             int size = (k-1)/2;
+
             for (int row = -1 * size; row < size + 1; row++)
                 for (int col = -1 * size; col < size + 1; col++)
                 {
@@ -365,8 +366,7 @@ namespace ppfis
 
     inline void median_filter(mask& m, int k)
     {
-        /*
-        m.operate([](pixels& op, pixel& np)
+        void (*median_func)(pixels&, pixel&, int) = [](pixels& op, pixel& np, int k)
         {
             int r[pow(k, 2)] = {0}, g[pow(k, 2)] = {0}, b[pow(k, 2)] = {0};
             int size = (k-1)/2;
@@ -380,12 +380,15 @@ namespace ppfis
                     g[i] = p.g;
                     b[i] = p.b;
                     i++;
-                 }
+                }
+
             sort(r, r + pow(k, 2)); 
             sort(g, b + pow(k, 2)); 
             sort(g, b + pow(k, 2)); 
 
             np = pixel(b[size+1], g[size+1], r[size+1]);
-        });*/
+        };
+
+        m.operate(median_func, k);
     }
 }
