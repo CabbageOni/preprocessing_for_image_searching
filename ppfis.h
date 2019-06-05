@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <pthread.h>
 #include <tuple>
+#include <cmath>
 
 typedef unsigned char uchar;
 
@@ -215,6 +216,93 @@ namespace ppfis
         {
             uchar gray = uchar((int(p.r) + int(p.g) + int(p.b))/3);
             p = gray;
+        });
+    }
+    
+    // template
+    inline void function_name(mask& m)
+    {
+        m.operate([](pixel& op, pixel& np)
+        {
+            int r = 0, g = 0, b = 0;
+        });
+    }
+
+    inline void sobel_operator(mask& m)
+    {
+        m.operate([](pixel& op, pixel& np)
+        {
+            int f[] = {1, 2, 1}
+
+            int x_r = 0; x_g = 0; x_b = 0;
+            for (int row = -1; row < 2; row++)
+                for (int col = -1; col < 2; col++)
+                {
+                    const pixel& p = op.at(row, col);
+                    x_r = f[row+1] * col * p.r;
+                    x_g = f[row+1] * col * p.g;
+                    x_b = f[row+1] * col * p.b;
+                }
+
+            int y_r = 0; y_g = 0; y_b = 0;
+            for (int row = -1; row < 2; row++)
+                for (int col = -1; col < 2; col++)
+                {
+                    const pixel& p = op.at(row, col);
+                    y_r = f[col+1] * row * p.r;
+                    y_g = f[col+1] * row * p.g;
+                    y_b = f[col+1] * row * p.b;
+                }
+            
+            int mag_r = 0, mag_g = 0, mag_b = 0;
+            mag_r = sqrt(pow(x_r, 2) + pow(y_r, 2));
+            mag_g = sqrt(pow(x_g, 2) + pow(y_g, 2));
+            mag_b = sqrt(pow(x_b, 2) + pow(y_b, 2));
+
+            np = pixel(mag_b, mag_g, mag_r);
+        });
+    }
+
+    inline void mean_filter(mask& m, int k)
+    {
+        m.operate([](pixel& op, pixel& np)
+        {
+            int r = 0, g = 0, b = 0;
+            int size = (k-1)/2
+            for (int row = -1 * size; row < size + 1; row++)
+                for (int col = -1 * size; col < size + 1; col++)
+                {
+                    const pixel& p = op.at(row, col);
+                    r += p.r;
+                    g += p.g;
+                    b += p.b;
+                }
+            np = pixel(b/pow(k, 2), g/pow(k, 2), r/pow(k, 2));
+        });
+    }
+
+    inline void median_filter(mask& m, int k)
+    {
+        m.operate([](pixel& op, pixel& np)
+        {
+            int r[pow(k, 2)] = {0}, g[pow(k, 2)] = {0}, b[pow(k, 2)] = {0};
+            int size = (k-1)/2;
+            int i = 0;
+
+            for (int row = -1 * size; row < size + 1; row++)
+                for (int col = -1 * size; col < size + 1; col++)
+                {
+                    const pixel& p = op.at(row, col);
+                    r[i] = p.r;
+                    g[i] = p.g;
+                    b[i] = p.b;
+                    i++;
+                 }
+            sort(r, r + pow(k, 2)); 
+            sort(g, b + pow(k, 2)); 
+            sort(g, b + pow(k, 2)); 
+
+            np = pixel(b[size+1], g[size+1], r[size+1]);
         });
     }
 
