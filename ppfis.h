@@ -14,6 +14,64 @@ pthread_join(thread, (void**)return_target)
 
 namespace ppfis
 {
+    // Simple thread managing class
+    template <int max_thread_count = 5, typename ... parameters>
+    class simple_thread
+    {
+    private:
+        pthread_t m_threads[max_thread_count];
+        struct thread_parameter
+        {
+            void (*func)(parameters...);
+            std::tuple<parameters...> params;
+        } m_thread_parameters[max_thread_count];
+        size_t m_current_thread = 0;
+
+        static inline void run_thread(void* param)
+        {
+            thread_parameter* p = reinterpret_cast<thread_parameter*>(param);
+            std::apply(p->func, p->params);
+        }
+
+    public:
+        void (*default_func)(parameters...) = nullptr;
+
+        inline simple_thread(void (*func)(parameters...) = nullptr) : default_func(func) { }
+
+        // Lock is not garunteed, proceed with caution with shared variables!
+        inline bool run(void (*func)(parameters...), parameters ... params)
+        {
+            if (!func)
+                return false;
+
+            if (m_current_thread == max_thread_count)
+                return false;
+
+            m_thread_parameters[m_current_thread] = { func, std::forward_as_tuple(params...) };
+
+            if(pthread_create(&m_threads[m_current_thread], nullptr, reinterpret_cast<void*(*)(void*)>(run_thread), &m_thread_parameters[m_current_thread]))
+                return false;
+
+            ++m_current_thread;
+            return true;   
+        }
+
+        inline bool run(parameters ... params)
+        {
+            return run(default_func, params...);
+        }
+
+        // Note that there is no return variable.
+        // If needed, utilized parameters instead.
+        inline void wait()
+        {
+            for (size_t i = 0; i < m_current_thread; ++i)
+                pthread_join(m_threads[i], nullptr);
+
+            m_current_thread = 0;
+        }
+    };
+
     // pixel is based on CV_8UC3
     union pixel
     {
@@ -67,8 +125,12 @@ namespace ppfis
         void set_border(int left, int top, int right, int bottom);
         void set_relative_border(int d_left, int d_top, int d_right, int d_bottom);
 
-        bool operate(void (*per_pixel_func)(pixel& current_pixel)) const; 
+        bool operate(void (*per_pixel_func)(pixel& current_pixel)); 
         bool operate(void (*per_pixel_func)(pixels& original_pixel, pixel& output_pixel));
+        template <typename ... parameters>
+        bool operate(void (*per_pixel_func)(pixel& current_pixel, parameters ... params), parameters ... params);
+        template <typename ... parameters>
+        bool operate(void (*per_pixel_func)(pixels& original_pixel, pixel& output_pixel, parameters ... params), parameters ... params);
     };
 
     class row_pixels
@@ -148,7 +210,7 @@ namespace ppfis
         border_bottom = m_image_height - d_bottom;
     }
 
-    inline bool mask::operate(void (*per_pixel_func)(pixel& current_pixel)) const
+    inline bool mask::operate(void (*per_pixel_func)(pixel& current_pixel))
     {
         if (!m_image_ptr || !per_pixel_func) return false;
 
@@ -207,6 +269,55 @@ namespace ppfis
         return true;
     }
 
+    template <typename ... parameters>
+    inline bool mask::operate(void (*per_pixel_func)(pixel& current_pixel, parameters ... params), parameters ... params)
+    {
+        if (!m_image_ptr || !per_pixel_func) return false;
+
+        // map ranges due to borders
+        int right = std::min(std::max(border_left, border_right), m_image_width);
+        int left = std::max(std::min(border_left, right), 0);
+        int bottom = std::min(std::max(border_top, border_bottom), m_image_height);
+        int top = std::max(std::min(border_top, bottom), 0);
+
+        for (int c = top; c < bottom; ++c)
+            for (int r = left; r < right; ++r)
+                per_pixel_func(reinterpret_cast<pixel*>(*m_image_ptr)[c * m_image_width + r], params...);
+
+        return true;
+    }
+
+    template <typename ... parameters>
+    inline bool mask::operate(void (*per_pixel_func)(pixels& original_pixel, pixel& output_pixel, parameters ... params), parameters ... params)
+    {
+        if (!m_image_ptr || !per_pixel_func) return false;
+
+        // create new image
+        pixel* new_image = new pixel[m_image_width * m_image_height];
+        memcpy(new_image, *m_image_ptr, m_image_width * m_image_height * 3);
+
+        // map ranges due to borders
+        int right = std::min(std::max(border_left, border_right), m_image_width);
+        int left = std::max(std::min(border_left, right), 0);
+        int bottom = std::min(std::max(border_top, border_bottom), m_image_height);
+        int top = std::max(std::min(border_top, bottom), 0);
+
+        pixels op;
+        op.m_mask_ptr = this;
+        for (int c = top; c < bottom; ++c)
+            for (int r = left; r < right; ++r)
+            {
+                op.m_current_column = c;
+                op.m_current_row = r;
+                per_pixel_func(op, new_image[c * m_image_width + r], params...);
+            }
+
+        // copy result
+        memcpy(*m_image_ptr, new_image, m_image_width * m_image_height * 3);
+        delete[] new_image;
+        return true;
+    }
+
     //example of built-in grayscale function
     inline void grayscale(mask& m)
     {
@@ -254,10 +365,7 @@ namespace ppfis
 
     inline void mean_filter(mask& m, int k)
     {
-        // k cannot be inside the lambda function
-        // needs better solution
-        /*
-        m.operate([](pixels& op, pixel& np)
+        void (*mean_func)(pixels&, pixel&, int) = [](pixels& op, pixel& np, int k)
         {
             int r = 0, g = 0, b = 0;
             int size = (k-1)/2;
@@ -270,13 +378,13 @@ namespace ppfis
                     b += p.b;
                 }
             np = pixel(b/pow(k, 2), g/pow(k, 2), r/pow(k, 2));
-        });*/
+        };
+
+        m.operate(mean_func, k);
     }
 
     inline void median_filter(mask& m, int k)
     {
-        // k cannot be inside the lambda function
-        // needs better solution
         /*
         m.operate([](pixels& op, pixel& np)
         {
@@ -300,50 +408,4 @@ namespace ppfis
             np = pixel(b[size+1], g[size+1], r[size+1]);
         });*/
     }
-
-    // Simple thread managing class
-    template <int max_thread_count = 5, typename ... parameters>
-    class simple_thread
-    {
-    private:
-        pthread_t m_threads[max_thread_count];
-        struct thread_parameter
-        {
-            void (*func)(parameters...);
-            std::tuple<parameters...> params;
-        } m_thread_parameters[max_thread_count];
-        size_t m_current_thread = 0;
-
-        static inline void run_thread(void* param)
-        {
-            thread_parameter* p = reinterpret_cast<thread_parameter*>(param);
-            std::apply(p->func, p->params);
-        }
-
-    public:
-        // Lock is not garunteed, proceed with caution with shared variables!
-        inline bool run(void (*func)(parameters...), parameters ... params)
-        {
-            if (m_current_thread == max_thread_count)
-                return false;
-
-            m_thread_parameters[m_current_thread] = { func, std::forward_as_tuple(params...) };
-
-            if(pthread_create(&m_threads[m_current_thread], nullptr, reinterpret_cast<void*(*)(void*)>(run_thread), &m_thread_parameters[m_current_thread]))
-                return false;
-
-            ++m_current_thread;
-            return true;   
-        }
-
-        // Note that there is no return variable.
-        // If needed, utilized parameters instead.
-        inline void wait()
-        {
-            for (size_t i = 0; i < m_current_thread; ++i)
-                pthread_join(m_threads[i], nullptr);
-
-            m_current_thread = 0;
-        }
-    };
 }
