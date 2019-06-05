@@ -208,10 +208,8 @@ namespace ppfis
     }
 
     //example of built-in grayscale function
-    inline void grayscale(uchar** image, int image_width, int image_height)
+    inline void grayscale(mask& m)
     {
-        mask m(image, image_width, image_height);
-        m.set_relative_border(50, 50, 50, 50);
         m.operate([](pixel& p)
         {
             uchar gray = uchar((int(p.r) + int(p.g) + int(p.b))/3);
@@ -219,22 +217,13 @@ namespace ppfis
         });
     }
     
-    // template
-    inline void function_name(mask& m)
-    {
-        m.operate([](pixel& op, pixel& np)
-        {
-            int r = 0, g = 0, b = 0;
-        });
-    }
-
     inline void sobel_operator(mask& m)
     {
-        m.operate([](pixel& op, pixel& np)
+        m.operate([](pixels& op, pixel& np)
         {
-            int f[] = {1, 2, 1}
+            int f[] = {1, 2, 1};
 
-            int x_r = 0; x_g = 0; x_b = 0;
+            int x_r = 0, x_g = 0, x_b = 0;
             for (int row = -1; row < 2; row++)
                 for (int col = -1; col < 2; col++)
                 {
@@ -244,7 +233,7 @@ namespace ppfis
                     x_b = f[row+1] * col * p.b;
                 }
 
-            int y_r = 0; y_g = 0; y_b = 0;
+            int y_r = 0, y_g = 0, y_b = 0;
             for (int row = -1; row < 2; row++)
                 for (int col = -1; col < 2; col++)
                 {
@@ -265,10 +254,13 @@ namespace ppfis
 
     inline void mean_filter(mask& m, int k)
     {
-        m.operate([](pixel& op, pixel& np)
+        // k cannot be inside the lambda function
+        // needs better solution
+        /*
+        m.operate([](pixels& op, pixel& np)
         {
             int r = 0, g = 0, b = 0;
-            int size = (k-1)/2
+            int size = (k-1)/2;
             for (int row = -1 * size; row < size + 1; row++)
                 for (int col = -1 * size; col < size + 1; col++)
                 {
@@ -278,12 +270,15 @@ namespace ppfis
                     b += p.b;
                 }
             np = pixel(b/pow(k, 2), g/pow(k, 2), r/pow(k, 2));
-        });
+        });*/
     }
 
     inline void median_filter(mask& m, int k)
     {
-        m.operate([](pixel& op, pixel& np)
+        // k cannot be inside the lambda function
+        // needs better solution
+        /*
+        m.operate([](pixels& op, pixel& np)
         {
             int r[pow(k, 2)] = {0}, g[pow(k, 2)] = {0}, b[pow(k, 2)] = {0};
             int size = (k-1)/2;
@@ -303,7 +298,7 @@ namespace ppfis
             sort(g, b + pow(k, 2)); 
 
             np = pixel(b[size+1], g[size+1], r[size+1]);
-        });
+        });*/
     }
 
     // Simple thread managing class
