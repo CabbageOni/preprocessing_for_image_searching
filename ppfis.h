@@ -2,6 +2,7 @@
 #include <pthread.h>
 #include <tuple>
 #include <cmath>
+#include <vector>
 
 typedef unsigned char uchar;
 
@@ -310,36 +311,28 @@ namespace ppfis
     
     inline void sobel_operator(mask& m)
     {
+        grayscale(m);
         m.operate([](pixels& op, pixel& np)
         {
             int f[] = {1, 2, 1};
 
-            int x_r = 0, x_g = 0, x_b = 0;
-            for (int row = -1; row < 2; row++)
-                for (int col = -1; col < 2; col++)
+            int x_r = 0;
+            for (int col = -1; col < 2; col++)
+                for (int row = -1; row < 2; row++)
                 {
                     const pixel& p = op.at(row, col);
-                    x_r = f[row+1] * col * p.r;
-                    x_g = f[row+1] * col * p.g;
-                    x_b = f[row+1] * col * p.b;
+                    x_r += f[col+1] * row * p.r;
                 }
 
-            int y_r = 0, y_g = 0, y_b = 0;
-            for (int row = -1; row < 2; row++)
-                for (int col = -1; col < 2; col++)
+            int y_r = 0;
+            for (int col = -1; col < 2; col++)
+                for (int row = -1; row < 2; row++)
                 {
                     const pixel& p = op.at(row, col);
-                    y_r = f[col+1] * row * p.r;
-                    y_g = f[col+1] * row * p.g;
-                    y_b = f[col+1] * row * p.b;
+                    y_r += f[row+1] * col * p.r;
                 }
             
-            int mag_r = 0, mag_g = 0, mag_b = 0;
-            mag_r = sqrt(pow(x_r, 2) + pow(y_r, 2));
-            mag_g = sqrt(pow(x_g, 2) + pow(y_g, 2));
-            mag_b = sqrt(pow(x_b, 2) + pow(y_b, 2));
-
-            np = pixel(mag_b, mag_g, mag_r);
+            np = sqrt(x_r * x_r + y_r * y_r);
         });
     }
 
@@ -368,7 +361,10 @@ namespace ppfis
     {
         void (*median_func)(pixels&, pixel&, int) = [](pixels& op, pixel& np, int k)
         {
-            int r[pow(k, 2)] = {0}, g[pow(k, 2)] = {0}, b[pow(k, 2)] = {0};
+            std::vector<int> r(pow(k, 2), 0);
+            std::vector<int> g(pow(k, 2), 0);
+            std::vector<int> b(pow(k, 2), 0);
+
             int size = (k-1)/2;
             int i = 0;
 
@@ -382,9 +378,9 @@ namespace ppfis
                     i++;
                 }
 
-            sort(r, r + pow(k, 2)); 
-            sort(g, b + pow(k, 2)); 
-            sort(g, b + pow(k, 2)); 
+            std::sort(r.begin(), r.end()); 
+            std::sort(g.begin(), g.end()); 
+            std::sort(b.begin(), b.end());
 
             np = pixel(b[size+1], g[size+1], r[size+1]);
         };

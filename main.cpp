@@ -46,8 +46,8 @@ void built_in_function_examples(mask& m)
 {
     m.set_relative_border(0,0,100,100);
     sobel_operator(m);
-    //m.set_relative_border(50,50,50,50);
-    //mean_filter(m, 15);
+    m.set_relative_border(50,50,50,50);
+    median_filter(m, 5);
 }
 
 void simple_thread_exmaples()
