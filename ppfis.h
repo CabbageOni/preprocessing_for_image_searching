@@ -308,40 +308,75 @@ namespace ppfis
             p = gray;
         });
     }
-    
+    // threshold    
+    inline void threshold(mask& m)
+    {
+        grayscale(m);
+        m.operate([](pixel& p)
+        {
+            if (p.r < 128)
+                p = 0;
+            else
+                p = 255; 
+        });
+    }
+    // edge detection 
     inline void sobel_operator(mask& m)
     {
+        int filter[] = {1, 2, 1};
+
         grayscale(m);
         m.operate([](pixels& op, pixel& np)
         {
-            int f[] = {1, 2, 1};
-
-            int x_r = 0;
-            for (int col = -1; col < 2; col++)
-                for (int row = -1; row < 2; row++)
+            int x = 0;
+            for (int row = -1; row < 2; row++)
+                for (int col = -1; col < 2; col++)
                 {
                     const pixel& p = op.at(row, col);
-                    x_r += f[col+1] * row * p.r;
+                    x += filter[row+1] * col * p.r;
                 }
 
-            int y_r = 0;
-            for (int col = -1; col < 2; col++)
-                for (int row = -1; row < 2; row++)
+            int y = 0;
+            for (int row = -1; row < 2; row++)
+                for (int col = -1; col < 2; col++)
                 {
                     const pixel& p = op.at(row, col);
-                    y_r += f[row+1] * col * p.r;
+                    y += filter[col+1] * row * p.r;
                 }
             
-            np = sqrt(x_r * x_r + y_r * y_r);
+            np = sqrt(x * x + y * y);
         });
     }
 
+    inline void laplacian(mask& m)
+    {
+        int filter[][] = {{  0,  1,  0},
+                          {  1, -4,  1},
+                          {  0,  1,  0}};
+
+        grayscale(m);
+        m.operate([](pixels& op, pixel& np)
+        {
+            int value = 0;
+            for (int row = -1; row < 2; row++)
+                for (int col = -1; col < 2; col++)
+                {
+                    const pixel& p = op.at(row, col);
+                    value += filter[row+1] * filter[col+1] * p.r;
+                }
+            
+            np = value;
+        }
+    }
+    // filtering
     inline void mean_filter(mask& m, int k)
     {
         void (*mean_func)(pixels&, pixel&, int) = [](pixels& op, pixel& np, int k)
         {
-            int r = 0, g = 0, b = 0;
+            int power = k * k;
             int size = (k-1)/2;
+
+            int r = 0, g = 0, b = 0;
 
             for (int row = -1 * size; row < size + 1; row++)
                 for (int col = -1 * size; col < size + 1; col++)
@@ -359,15 +394,15 @@ namespace ppfis
 
     inline void median_filter(mask& m, int k)
     {
-        void (*median_func)(pixels&, pixel&, int) = [](pixels& op, pixel& np, int k)
-        {
-            std::vector<int> r(pow(k, 2), 0);
-            std::vector<int> g(pow(k, 2), 0);
-            std::vector<int> b(pow(k, 2), 0);
-
+        void (*median_func)(pixels&, pixel&, int) = [](pixels& op, pixel& np, int k) {
+            int power = k * k;
             int size = (k-1)/2;
-            int i = 0;
 
+            std::vector<int> r(power, 0);
+            std::vector<int> g(power, 0);
+            std::vector<int> b(power, 0);
+
+            int i = 0;
             for (int row = -1 * size; row < size + 1; row++)
                 for (int col = -1 * size; col < size + 1; col++)
                 {
