@@ -378,7 +378,6 @@ namespace ppfis
         compute_hist(m, hist);
         threshold = compute_otsu();
 
-        grayscale(m);
         m.operate([](pixel& p)
         {
             if (p.r < threshold)
@@ -393,7 +392,6 @@ namespace ppfis
     {
         int filter[] = {1, 2, 1};
 
-        grayscale(m);
         m.operate([](pixels& op, pixel& np)
         {
             int x = 0;
@@ -422,7 +420,6 @@ namespace ppfis
                           {  1, -4,  1},
                           {  0,  1,  0}};
 
-        grayscale(m);
         m.operate([](pixels& op, pixel& np)
         {
             int value = 0;
@@ -489,5 +486,57 @@ namespace ppfis
         };
 
         m.operate(median_func, k);
+    }
+    // morphological
+    inline void erosion(mask& m)
+    {
+        int filter[][] = {{  0,  1,  0},
+                          {  1,  1,  1},
+                          {  0,  1,  0}};
+
+        m.operate([](pixels& op, pixel& np)
+        {
+            int value = 0;
+            for (int row = -1; row < 2; row++)
+                for (int col = -1; col < 2; col++)
+                {
+                    // not implemented yet
+                    const pixel& p = op.at(row, col);
+                }
+            
+            np = value;
+        }
+    }
+
+    inline void dilation(mask& m)
+    {
+        int filter[][] = {{  0,  1,  0},
+                          {  1,  1,  1},
+                          {  0,  1,  0}};
+
+        m.operate([](pixels& op, pixel& np)
+        {
+            int value = 0;
+            for (int row = -1; row < 2; row++)
+                for (int col = -1; col < 2; col++)
+                {
+                    // not implemented yet
+                    const pixel& p = op.at(row, col);
+                }
+            
+            np = value;
+        }
+    }
+
+    inline void opening(mask& m)
+    {
+        erosion(m);
+        dilation(m);
+    }
+
+    inline void closing(mask& m)
+    {
+        dilation(m);
+        erosion(m);
     }
 }
