@@ -309,17 +309,85 @@ namespace ppfis
         });
     }
     // threshold    
-    inline void threshold(mask& m)
+    inline void threshold(mask& m, int threshold)
     {
         grayscale(m);
         m.operate([](pixel& p)
         {
-            if (p.r < 128)
+            if (p.r < threshold)
                 p = 0;
             else
                 p = 255; 
         });
     }
+    
+    inline void compute_hist(mask& m, unsigned *hist)
+    {
+        m.operate([](pixel& p)
+        {
+            hist[p.r]++; 
+        });
+    }
+
+    inline int compute_otsu(mask& m, unsigned *hist)
+    {
+        // Need to get the size of mask
+        long int N = m.width * m.height;
+        int threshold = 0;
+
+        float sum = 0;
+        float sumB = 0;
+        int q1 = 0;
+        int q2 = 0;
+        float varMax = 0;
+
+        for (int i = 0; i <= 255; i++)
+            sum += i * ((int)hist[i]);
+
+        for (int i = 0; i <= 255; i++)
+        {
+            q1 += hist[i];
+            if (q1 == 0)
+                continue;
+
+            q2 = N - q1;
+            if (q2 == 0)
+                break;
+
+            sumB += (float) (i * ((int)hist[i]));
+            float m1 = sumB / q1;
+            float m2 = (sum - sumB) / q2;
+
+            float varBetween = (float) q1 * (float) q2 * (m1 - m2) * (m1 - m2);
+
+            if (varBetween > varMax) 
+            {
+                varMax = varBetween;
+                threshold = i;
+            }
+        }
+
+        return threshold;
+    }
+
+    inline void otsu_threshold(mask& m)
+    {
+        unsigned hist[256] = {0};
+        int threshold;
+        
+        compute_hist(m, hist);
+        threshold = compute_otsu();
+
+        grayscale(m);
+        m.operate([](pixel& p)
+        {
+            if (p.r < threshold)
+                p = 0;
+            else
+                p = 255; 
+        });
+    }
+
     // edge detection 
     inline void sobel_operator(mask& m)
     {
