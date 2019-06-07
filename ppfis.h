@@ -427,13 +427,33 @@ namespace ppfis
                 for (int col = -1; col < 2; col++)
                 {
                     const pixel& p = op.at(row, col);
-                    value += filter[row+1] * filter[col+1] * p.r;
+                    value += filter[row+1][col+1] * p.r;
                 }
             
             np = value;
         }
     }
     // filtering
+    inline void sharpen_filter(mask& m)
+    {
+        int filter[][] = {{  0, -1,  0},
+                          { -1,  5, -1},
+                          {  0, -1,  0}};
+
+        m.operate([](pixels& op, pixel& np)
+        {
+            int value = 0;
+            for (int row = -1; row < 2; row++)
+                for (int col = -1; col < 2; col++)
+                {
+                    const pixel& p = op.at(row, col);
+                    value += filter[row+1][col+1] * p.r;
+                }
+            
+            np = value;
+        }
+    }
+
     inline void mean_filter(mask& m, int k)
     {
         void (*mean_func)(pixels&, pixel&, int) = [](pixels& op, pixel& np, int k)
