@@ -308,31 +308,38 @@ namespace ppfis
             p = gray;
         });
     }
-    // threshold    
+
+    // threshold
     inline void threshold(mask& m, int threshold)
     {
         grayscale(m);
-        m.operate([](pixel& p)
+
+        constexpr void (*func)(pixel&, int) = [](pixel& p, int threshold)
         {
             if (p.r < threshold)
                 p = 0;
             else
                 p = 255; 
-        });
+        };
+
+        m.operate(func, threshold);
     }
     
-    inline void compute_hist(mask& m, unsigned *hist)
+    inline void compute_hist(mask& m, unsigned* hist)
     {
-        m.operate([](pixel& p)
+        constexpr void (*func)(pixel&, unsigned*) = [](pixel& p, unsigned* hist)
         {
+            // atomicity warning!
             hist[p.r]++; 
-        });
+        };
+
+        m.operate(func, hist);
     }
 
     inline int compute_otsu(mask& m, unsigned *hist)
     {
         // Need to get the size of mask
-        long int N = m.width * m.height;
+        long int N = (m.border_right - m.border_left) * (m.border_bottom - m.border_top);
         int threshold = 0;
 
         float sum = 0;
@@ -373,27 +380,27 @@ namespace ppfis
     inline void otsu_threshold(mask& m)
     {
         unsigned hist[256] = {0};
-        int threshold;
         
         compute_hist(m, hist);
-        threshold = compute_otsu();
 
-        m.operate([](pixel& p)
+        constexpr void (*func)(pixel&, int) = [](pixel& p, int threshold)
         {
             if (p.r < threshold)
                 p = 0;
             else
-                p = 255; 
-        });
+                p = 255;  
+        };
+
+        m.operate(func, compute_otsu(m, hist));
     }
 
     // edge detection 
     inline void sobel_operator(mask& m)
     {
-        int filter[] = {1, 2, 1};
-
         m.operate([](pixels& op, pixel& np)
         {
+            constexpr int filter[] = {1, 2, 1};
+
             int x = 0;
             for (int row = -1; row < 2; row++)
                 for (int col = -1; col < 2; col++)
@@ -416,12 +423,11 @@ namespace ppfis
 
     inline void laplacian(mask& m)
     {
-        int filter[][] = {{  0,  1,  0},
-                          {  1, -4,  1},
-                          {  0,  1,  0}};
-
         m.operate([](pixels& op, pixel& np)
         {
+            constexpr int filter[3][3] = {{  0,  1,  0},
+                                          {  1, -4,  1},
+                                          {  0,  1,  0}};
             int value = 0;
             for (int row = -1; row < 2; row++)
                 for (int col = -1; col < 2; col++)
@@ -431,17 +437,17 @@ namespace ppfis
                 }
             
             np = value;
-        }
+        });
     }
+
     // filtering
     inline void sharpen_filter(mask& m)
     {
-        int filter[][] = {{  0, -1,  0},
-                          { -1,  5, -1},
-                          {  0, -1,  0}};
-
         m.operate([](pixels& op, pixel& np)
         {
+            constexpr int filter[3][3] = {{  0, -1,  0},
+                                          { -1,  5, -1},
+                                          {  0, -1,  0}};
             int value = 0;
             for (int row = -1; row < 2; row++)
                 for (int col = -1; col < 2; col++)
@@ -451,7 +457,7 @@ namespace ppfis
                 }
             
             np = value;
-        }
+        });
     }
 
     inline void mean_filter(mask& m, int k)
@@ -507,15 +513,15 @@ namespace ppfis
 
         m.operate(median_func, k);
     }
+
     // morphological
     inline void erosion(mask& m)
     {
-        int filter[][] = {{  0,  1,  0},
-                          {  1,  1,  1},
-                          {  0,  1,  0}};
-
         m.operate([](pixels& op, pixel& np)
         {
+            constexpr int filter[3][3] = {{  0,  1,  0},
+                                          {  1,  1,  1},
+                                          {  0,  1,  0}};
             int value = 0;
             for (int row = -1; row < 2; row++)
                 for (int col = -1; col < 2; col++)
@@ -525,17 +531,16 @@ namespace ppfis
                 }
             
             np = value;
-        }
+        });
     }
 
     inline void dilation(mask& m)
     {
-        int filter[][] = {{  0,  1,  0},
-                          {  1,  1,  1},
-                          {  0,  1,  0}};
-
         m.operate([](pixels& op, pixel& np)
         {
+            constexpr int filter[3][3] = {{  0,  1,  0},
+                                          {  1,  1,  1},
+                                          {  0,  1,  0}};
             int value = 0;
             for (int row = -1; row < 2; row++)
                 for (int col = -1; col < 2; col++)
@@ -545,7 +550,7 @@ namespace ppfis
                 }
             
             np = value;
-        }
+        });
     }
 
     inline void opening(mask& m)
