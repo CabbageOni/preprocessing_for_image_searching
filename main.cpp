@@ -45,7 +45,7 @@ int main(int argc, char** argv)
 void built_in_function_examples(mask& m)
 {
     m.set_relative_border(0,0,0,0);
-    otsu_threshold(m);
+    sobel_operator(m);
 }
 
 void simple_thread_exmaples()

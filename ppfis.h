@@ -327,6 +327,8 @@ namespace ppfis
     
     inline void compute_hist(mask& m, unsigned* hist)
     {
+        // make it publicly available?
+
         constexpr void (*func)(pixel&, unsigned*) = [](pixel& p, unsigned* hist)
         {
             // atomicity warning!
@@ -508,7 +510,13 @@ namespace ppfis
             std::sort(g.begin(), g.end()); 
             std::sort(b.begin(), b.end());
 
-            np = pixel(b[size+1], g[size+1], r[size+1]);
+            np = pixel(b[size+1], g[size+1], r[size+1]); // why size + 1?
+
+            //int rr = *std::max_element(r.begin(), r.end()); 
+            //int rg = *std::max_element(g.begin(), g.end()); 
+            //int rb = *std::max_element(b.begin(), b.end());
+
+            //np = pixel(rb, rg, rr);
         };
 
         m.operate(median_func, k);
