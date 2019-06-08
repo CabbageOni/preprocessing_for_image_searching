@@ -100,6 +100,11 @@ namespace ppfis
         int m_image_width = -1, m_image_height = -1;
 
         static void operate_per_pixel_thread(pixel* image, int image_width, void (*per_pixel_func)(pixel&), int left, int right, int top, int bottom);
+        static void operate_per_pixel_thread(mask* m, pixel* new_image, void (*per_pixel_func)(pixels&, pixel&), int left, int right, int top, int bottom);
+        template <typename ... parameters>
+        static void operate_per_pixel_thread(pixel* image, int image_width, void (*per_pixel_func)(pixel&, parameters ... params), int left, int right, int top, int bottom, parameters ... params);
+        template <typename ... parameters>
+        static void operate_per_pixel_thread(mask* m, pixel* new_image, void (*per_pixel_func)(pixels&, pixel&, parameters ... params), int left, int right, int top, int bottom, parameters ... params);
 
         friend pixels;
         friend row_pixels;
@@ -169,6 +174,41 @@ namespace ppfis
                 per_pixel_func(image[c * image_width + r]);
     }
 
+    inline void mask::operate_per_pixel_thread(mask* m, pixel* new_image, void (*per_pixel_func)(pixels&, pixel&), int left, int right, int top, int bottom)
+    {
+        pixels op;
+        op.m_mask_ptr = m;
+        for (int c = top; c < bottom; ++c)
+            for (int r = left; r < right; ++r)
+            {
+                op.m_current_column = c;
+                op.m_current_row = r;
+                per_pixel_func(op, new_image[c * m->m_image_width + r]);
+            }
+    }
+
+    template <typename ... parameters>
+    inline void mask::operate_per_pixel_thread(pixel* image, int image_width, void (*per_pixel_func)(pixel&, parameters ...), int left, int right, int top, int bottom, parameters ... params)
+    {
+        for (int c = top; c < bottom; ++c)
+            for (int r = left; r < right; ++r)
+                per_pixel_func(image[c * image_width + r], params...);
+    }
+
+    template <typename ... parameters>
+    inline void mask::operate_per_pixel_thread(mask* m, pixel* new_image, void (*per_pixel_func)(pixels&, pixel&, parameters ...), int left, int right, int top, int bottom, parameters ... params)
+    {
+        pixels op;
+        op.m_mask_ptr = m;
+        for (int c = top; c < bottom; ++c)
+            for (int r = left; r < right; ++r)
+            {
+                op.m_current_column = c;
+                op.m_current_row = r;
+                per_pixel_func(op, new_image[c * m->m_image_width + r], params...);
+            }
+    }
+
     inline mask::mask(uchar** image_ptr, int image_width, int image_height) : m_image_ptr(image_ptr), m_image_width(image_height), m_image_height(image_width)
     {
         border_left = 0;
@@ -235,15 +275,17 @@ namespace ppfis
         int bottom = std::min(std::max(border_top, border_bottom), m_image_height);
         int top = std::max(std::min(border_top, bottom), 0);
 
-        pixels op;
-        op.m_mask_ptr = this;
-        for (int c = top; c < bottom; ++c)
-            for (int r = left; r < right; ++r)
-            {
-                op.m_current_column = c;
-                op.m_current_row = r;
-                per_pixel_func(op, new_image[c * m_image_width + r]);
-            }
+        simple_thread<m_mask_maximum_thread, mask*, pixel*, void (*)(pixels&, pixel&), int, int, int, int> t(mask::operate_per_pixel_thread);
+
+        // estimate thread count
+        int concurrent_operation_count = bottom - top > m_mask_maximum_thread + 1 ? m_mask_maximum_thread + 1 : 1;
+        int height_per_thread = (bottom - top) / concurrent_operation_count;
+
+        // run threads
+        for (int i = 0; i < concurrent_operation_count - 1; ++i)
+            t.run(this, new_image, per_pixel_func, left, right, top + height_per_thread * i, top + height_per_thread * (i + 1));
+        operate_per_pixel_thread(this, new_image, per_pixel_func, left, right, top + height_per_thread * (concurrent_operation_count - 1), bottom);
+        t.wait();
 
         // copy result
         memcpy(*m_image_ptr, new_image, m_image_width * m_image_height * 3);
@@ -262,10 +304,20 @@ namespace ppfis
         int bottom = std::min(std::max(border_top, border_bottom), m_image_height);
         int top = std::max(std::min(border_top, bottom), 0);
 
-        for (int c = top; c < bottom; ++c)
-            for (int r = left; r < right; ++r)
-                per_pixel_func(reinterpret_cast<pixel*>(*m_image_ptr)[c * m_image_width + r], params...);
+        simple_thread<m_mask_maximum_thread, pixel*, int, void (*)(pixel&, parameters...), int, int, int, int, parameters ... > t(mask::operate_per_pixel_thread);
 
+        pixel* image = reinterpret_cast<pixel*>(*m_image_ptr);
+
+        // estimate thread count
+        int concurrent_operation_count = bottom - top > m_mask_maximum_thread + 1 ? m_mask_maximum_thread + 1 : 1;
+        int height_per_thread = (bottom - top) / concurrent_operation_count;
+
+        // run threads
+        for (int i = 0; i < concurrent_operation_count - 1; ++i)
+            t.run(image, m_image_width, per_pixel_func, left, right, top + height_per_thread * i, top + height_per_thread * (i + 1), params...);
+        operate_per_pixel_thread(image, m_image_width, per_pixel_func, left, right, top + height_per_thread * (concurrent_operation_count - 1), bottom, params...);
+
+        t.wait();
         return true;
     }
 
@@ -284,15 +336,18 @@ namespace ppfis
         int bottom = std::min(std::max(border_top, border_bottom), m_image_height);
         int top = std::max(std::min(border_top, bottom), 0);
 
-        pixels op;
-        op.m_mask_ptr = this;
-        for (int c = top; c < bottom; ++c)
-            for (int r = left; r < right; ++r)
-            {
-                op.m_current_column = c;
-                op.m_current_row = r;
-                per_pixel_func(op, new_image[c * m_image_width + r], params...);
-            }
+        simple_thread<m_mask_maximum_thread, mask*, pixel*, void (*)(pixels&, pixel&, parameters...), int, int, int, int, parameters ... > t(mask::operate_per_pixel_thread);
+
+        // estimate thread count
+        int concurrent_operation_count = bottom - top > m_mask_maximum_thread + 1 ? m_mask_maximum_thread + 1 : 1;
+        int height_per_thread = (bottom - top) / concurrent_operation_count;
+
+        // run threads
+        for (int i = 0; i < concurrent_operation_count - 1; ++i)
+            t.run(this, new_image, per_pixel_func, left, right, top + height_per_thread * i, top + height_per_thread * (i + 1), params...);
+        operate_per_pixel_thread(this, new_image, per_pixel_func, left, right, top + height_per_thread * (concurrent_operation_count - 1), bottom, params...);
+
+        t.wait();
 
         // copy result
         memcpy(*m_image_ptr, new_image, m_image_width * m_image_height * 3);
@@ -406,18 +461,12 @@ namespace ppfis
             int x = 0;
             for (int row = -1; row < 2; row++)
                 for (int col = -1; col < 2; col++)
-                {
-                    const pixel& p = op.at(row, col);
-                    x += filter[row+1] * col * p.r;
-                }
+                    x += filter[row+1] * col * op.at(row, col).r;
 
             int y = 0;
             for (int row = -1; row < 2; row++)
                 for (int col = -1; col < 2; col++)
-                {
-                    const pixel& p = op.at(row, col);
-                    y += filter[col+1] * row * p.r;
-                }
+                    y += filter[col+1] * row * op.at(row, col).r;
             
             np = sqrt(x * x + y * y);
         });
