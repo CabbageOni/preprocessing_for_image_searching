@@ -35,6 +35,7 @@ int main(int argc, char** argv)
     mask m(&image.data, width, height);
 
     built_in_function_examples(m);
+
     imwrite("output.jpg", image);
 
     simple_thread_exmaples();
@@ -45,7 +46,7 @@ int main(int argc, char** argv)
 void built_in_function_examples(mask& m)
 {
     m.set_relative_border(0,0,0,0);
-    median_filter(m, 5);
+    sharpen_filter(m);
 }
 
 void simple_thread_exmaples()

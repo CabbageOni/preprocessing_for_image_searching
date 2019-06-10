@@ -479,15 +479,21 @@ namespace ppfis
             constexpr int filter[3][3] = {{  0,  1,  0},
                                           {  1, -4,  1},
                                           {  0,  1,  0}};
-            int value = 0;
+            int r = 0, g = 0, b = 0;
             for (int row = -1; row < 2; row++)
                 for (int col = -1; col < 2; col++)
                 {
                     const pixel& p = op.at(row, col);
-                    value += filter[row+1][col+1] * p.r;
+                    r += filter[row+1][col+1] * p.r;
+                    g += filter[row+1][col+1] * p.g;
+                    b += filter[row+1][col+1] * p.b;
                 }
             
-            np = value;
+            r = std::max(0,std::min(255, r));
+            g = std::max(0,std::min(255, g));
+            b = std::max(0,std::min(255, b));
+
+            np = pixel(b,g,r);
         });
     }
 
@@ -499,15 +505,21 @@ namespace ppfis
             constexpr int filter[3][3] = {{  0, -1,  0},
                                           { -1,  5, -1},
                                           {  0, -1,  0}};
-            int value = 0;
+            int r = 0, g = 0, b = 0;
             for (int row = -1; row < 2; row++)
                 for (int col = -1; col < 2; col++)
                 {
                     const pixel& p = op.at(row, col);
-                    value += filter[row+1][col+1] * p.r;
+                    r += filter[row+1][col+1] * p.r;
+                    g += filter[row+1][col+1] * p.g;
+                    b += filter[row+1][col+1] * p.b;
                 }
             
-            np = value;
+            r = std::max(0,std::min(255, r));
+            g = std::max(0,std::min(255, g));
+            b = std::max(0,std::min(255, b));
+
+            np = pixel(b,g,r);
         });
     }
 
@@ -559,13 +571,7 @@ namespace ppfis
             std::sort(g.begin(), g.end()); 
             std::sort(b.begin(), b.end());
 
-            np = pixel(b[size+1], g[size+1], r[size+1]); // why size + 1?
-
-            //int rr = *std::max_element(r.begin(), r.end()); 
-            //int rg = *std::max_element(g.begin(), g.end()); 
-            //int rb = *std::max_element(b.begin(), b.end());
-
-            //np = pixel(rb, rg, rr);
+            np = pixel(b[power/2], g[power/2], r[power/2]);
         };
 
         m.operate(median_func, k);
