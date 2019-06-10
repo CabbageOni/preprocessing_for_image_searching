@@ -582,17 +582,18 @@ namespace ppfis
     {
         m.operate([](pixels& op, pixel& np)
         {
-            constexpr int filter[3][3] = {{  0,  1,  0},
+            constexpr int filter[3][3] = {{  1,  1,  1},
                                           {  1,  1,  1},
-                                          {  0,  1,  0}};
-            int value = 0;
+                                          {  1,  1,  1}};
+            int value = 255;
             for (int row = -1; row < 2; row++)
                 for (int col = -1; col < 2; col++)
                 {
-                    // not implemented yet
                     const pixel& p = op.at(row, col);
+                    if (filter[row+1][col+1] == 1) 
+                        if (p.r != 255)
+                            value = 0;
                 }
-            
             np = value;
         });
     }
@@ -601,17 +602,18 @@ namespace ppfis
     {
         m.operate([](pixels& op, pixel& np)
         {
-            constexpr int filter[3][3] = {{  0,  1,  0},
+            constexpr int filter[3][3] = {{  1,  1,  1},
                                           {  1,  1,  1},
-                                          {  0,  1,  0}};
+                                          {  1,  1,  1}};
             int value = 0;
             for (int row = -1; row < 2; row++)
                 for (int col = -1; col < 2; col++)
                 {
-                    // not implemented yet
                     const pixel& p = op.at(row, col);
+                    if (filter[row+1][col+1] == 1)
+                        if (p.r == 255)
+                            value = 255;
                 }
-            
             np = value;
         });
     }
