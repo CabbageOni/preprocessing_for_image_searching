@@ -46,7 +46,8 @@ int main(int argc, char** argv)
 void built_in_function_examples(mask& m)
 {
     m.set_relative_border(0,0,0,0);
-    sharpen_filter(m);
+    threshold(m, 184);
+    closing(m);
 }
 
 void simple_thread_exmaples()
