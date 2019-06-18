@@ -95,12 +95,11 @@ namespace ppfis
     {
     private:
         constexpr static int m_mask_maximum_thread = 8;
+        int m_thread_count = 0;
 
         uchar** m_image_ptr = nullptr;
         int m_image_width = -1, m_image_height = -1;
 
-        static void operate_per_pixel_thread(pixel* image, int image_width, void (*per_pixel_func)(pixel&), int left, int right, int top, int bottom);
-        static void operate_per_pixel_thread(mask* m, pixel* new_image, void (*per_pixel_func)(pixels&, pixel&), int left, int right, int top, int bottom);
         template <typename ... parameters>
         static void operate_per_pixel_thread(pixel* image, int image_width, void (*per_pixel_func)(pixel&, parameters ... params), int left, int right, int top, int bottom, parameters ... params);
         template <typename ... parameters>
@@ -114,12 +113,13 @@ namespace ppfis
         int border_right = 0;
         int border_bottom = 0;
 
+        inline int get_thread_count(void) { return m_thread_count; }
+        inline void set_thread_count(int thread_count) { m_thread_count = std::max(0, std::min(m_mask_maximum_thread, thread_count));}
+
         mask(uchar** image_ptr, int image_width, int image_height);
         void set_border(int left, int top, int right, int bottom);
         void set_relative_border(int d_left, int d_top, int d_right, int d_bottom);
 
-        bool operate(void (*per_pixel_func)(pixel& current_pixel)); 
-        bool operate(void (*per_pixel_func)(pixels& original_pixel, pixel& output_pixel));
         template <typename ... parameters>
         bool operate(void (*per_pixel_func)(pixel& current_pixel, parameters ... params), parameters ... params);
         template <typename ... parameters>
@@ -167,26 +167,6 @@ namespace ppfis
         inline row_pixels operator[](int relative_row) const { return row_pixels(m_current_row + relative_row, m_current_column, m_mask_ptr); }
     };
 
-    inline void mask::operate_per_pixel_thread(pixel* image, int image_width, void (*per_pixel_func)(pixel&), int left, int right, int top, int bottom)
-    {
-        for (int c = top; c < bottom; ++c)
-            for (int r = left; r < right; ++r)
-                per_pixel_func(image[c * image_width + r]);
-    }
-
-    inline void mask::operate_per_pixel_thread(mask* m, pixel* new_image, void (*per_pixel_func)(pixels&, pixel&), int left, int right, int top, int bottom)
-    {
-        pixels op;
-        op.m_mask_ptr = m;
-        for (int c = top; c < bottom; ++c)
-            for (int r = left; r < right; ++r)
-            {
-                op.m_current_column = c;
-                op.m_current_row = r;
-                per_pixel_func(op, new_image[c * m->m_image_width + r]);
-            }
-    }
-
     template <typename ... parameters>
     inline void mask::operate_per_pixel_thread(pixel* image, int image_width, void (*per_pixel_func)(pixel&, parameters ...), int left, int right, int top, int bottom, parameters ... params)
     {
@@ -233,66 +213,6 @@ namespace ppfis
         border_bottom = m_image_height - d_bottom;
     }
 
-    inline bool mask::operate(void (*per_pixel_func)(pixel& current_pixel))
-    {
-        if (!m_image_ptr || !per_pixel_func) return false;
-
-        // map ranges due to borders
-        int right = std::min(std::max(border_left, border_right), m_image_width);
-        int left = std::max(std::min(border_left, right), 0);
-        int bottom = std::min(std::max(border_top, border_bottom), m_image_height);
-        int top = std::max(std::min(border_top, bottom), 0);
-
-        simple_thread<m_mask_maximum_thread, pixel*, int, void (*)(pixel&), int, int, int, int> t(mask::operate_per_pixel_thread);
-
-        pixel* image = reinterpret_cast<pixel*>(*m_image_ptr);
-
-        // estimate thread count
-        int concurrent_operation_count = bottom - top > m_mask_maximum_thread + 1 ? m_mask_maximum_thread + 1 : 1;
-        int height_per_thread = (bottom - top) / concurrent_operation_count;
-
-        // run threads
-        for (int i = 0; i < concurrent_operation_count - 1; ++i)
-            t.run(image, m_image_width, per_pixel_func, left, right, top + height_per_thread * i, top + height_per_thread * (i + 1));
-        operate_per_pixel_thread(image, m_image_width, per_pixel_func, left, right, top + height_per_thread * (concurrent_operation_count - 1), bottom);
-
-        t.wait();
-
-        return true;
-    }
-
-    inline bool mask::operate(void (*per_pixel_func)(pixels& original_pixel, pixel& output_pixel))
-    {
-        if (!m_image_ptr || !per_pixel_func) return false;
-
-        // create new image
-        pixel* new_image = new pixel[m_image_width * m_image_height];
-        memcpy(new_image, *m_image_ptr, m_image_width * m_image_height * 3);
-
-        // map ranges due to borders
-        int right = std::min(std::max(border_left, border_right), m_image_width);
-        int left = std::max(std::min(border_left, right), 0);
-        int bottom = std::min(std::max(border_top, border_bottom), m_image_height);
-        int top = std::max(std::min(border_top, bottom), 0);
-
-        simple_thread<m_mask_maximum_thread, mask*, pixel*, void (*)(pixels&, pixel&), int, int, int, int> t(mask::operate_per_pixel_thread);
-
-        // estimate thread count
-        int concurrent_operation_count = bottom - top > m_mask_maximum_thread + 1 ? m_mask_maximum_thread + 1 : 1;
-        int height_per_thread = (bottom - top) / concurrent_operation_count;
-
-        // run threads
-        for (int i = 0; i < concurrent_operation_count - 1; ++i)
-            t.run(this, new_image, per_pixel_func, left, right, top + height_per_thread * i, top + height_per_thread * (i + 1));
-        operate_per_pixel_thread(this, new_image, per_pixel_func, left, right, top + height_per_thread * (concurrent_operation_count - 1), bottom);
-        t.wait();
-
-        // copy result
-        memcpy(*m_image_ptr, new_image, m_image_width * m_image_height * 3);
-        delete[] new_image;
-        return true;
-    }
-
     template <typename ... parameters>
     inline bool mask::operate(void (*per_pixel_func)(pixel& current_pixel, parameters ... params), parameters ... params)
     {
@@ -309,7 +229,7 @@ namespace ppfis
         pixel* image = reinterpret_cast<pixel*>(*m_image_ptr);
 
         // estimate thread count
-        int concurrent_operation_count = bottom - top > m_mask_maximum_thread + 1 ? m_mask_maximum_thread + 1 : 1;
+        int concurrent_operation_count = bottom - top > m_thread_count + 1 ? m_thread_count + 1 : 1;
         int height_per_thread = (bottom - top) / concurrent_operation_count;
 
         // run threads
@@ -339,7 +259,7 @@ namespace ppfis
         simple_thread<m_mask_maximum_thread, mask*, pixel*, void (*)(pixels&, pixel&, parameters...), int, int, int, int, parameters ... > t(mask::operate_per_pixel_thread);
 
         // estimate thread count
-        int concurrent_operation_count = bottom - top > m_mask_maximum_thread + 1 ? m_mask_maximum_thread + 1 : 1;
+        int concurrent_operation_count = bottom - top > m_thread_count + 1 ? m_thread_count + 1 : 1;
         int height_per_thread = (bottom - top) / concurrent_operation_count;
 
         // run threads
@@ -357,11 +277,13 @@ namespace ppfis
 
     inline void grayscale(mask& m)
     {
-        m.operate([](pixel& p)
+        void (*func)(pixel& p) = [](pixel& p)
         {
             uchar gray = uchar((int(p.r) + int(p.g) + int(p.b))/3);
             p = gray;
-        });
+        };
+
+        m.operate(func);
     }
 
     // threshold
@@ -384,13 +306,17 @@ namespace ppfis
     {
         // make it publicly available?
 
+        int prev_thread_count = m.get_thread_count();
+        m.set_thread_count(0); // avoid data race problem 
+
         constexpr void (*func)(pixel&, unsigned*) = [](pixel& p, unsigned* hist)
         {
-            // atomicity warning!
             hist[p.r]++; 
         };
 
         m.operate(func, hist);
+
+        m.set_thread_count(prev_thread_count);
     }
 
     inline int compute_otsu(mask& m, unsigned *hist)
@@ -454,7 +380,7 @@ namespace ppfis
     // edge detection 
     inline void sobel_operator(mask& m)
     {
-        m.operate([](pixels& op, pixel& np)
+        void (*func)(pixels& op, pixel& np) = [](pixels& op, pixel& np)
         {
             constexpr int filter[] = {1, 2, 1};
 
@@ -469,12 +395,14 @@ namespace ppfis
                     y += filter[col+1] * row * op.at(row, col).r;
             
             np = sqrt(x * x + y * y);
-        });
+        };
+
+        m.operate(func);
     }
 
     inline void laplacian(mask& m)
     {
-        m.operate([](pixels& op, pixel& np)
+        void (*func)(pixels& op, pixel& np) = [](pixels& op, pixel& np)
         {
             constexpr int filter[3][3] = {{  0,  1,  0},
                                           {  1, -4,  1},
@@ -494,13 +422,15 @@ namespace ppfis
             b = std::max(0,std::min(255, b));
 
             np = pixel(b,g,r);
-        });
+        };
+
+        m.operate(func);
     }
 
     // filtering
     inline void sharpen_filter(mask& m)
     {
-        m.operate([](pixels& op, pixel& np)
+        void (*func)(pixels& op, pixel& np) = [](pixels& op, pixel& np)
         {
             constexpr int filter[3][3] = {{  0, -1,  0},
                                           { -1,  5, -1},
@@ -520,7 +450,9 @@ namespace ppfis
             b = std::max(0,std::min(255, b));
 
             np = pixel(b,g,r);
-        });
+        };
+
+        m.operate(func);
     }
 
     inline void mean_filter(mask& m, int k)
@@ -580,7 +512,7 @@ namespace ppfis
     // morphological
     inline void erosion(mask& m)
     {
-        m.operate([](pixels& op, pixel& np)
+        void (*func)(pixels& op, pixel& np) = [](pixels& op, pixel& np)
         {
             constexpr int filter[3][3] = {{  1,  1,  1},
                                           {  1,  1,  1},
@@ -595,12 +527,14 @@ namespace ppfis
                             value = 0;
                 }
             np = value;
-        });
+        };
+
+        m.operate(func);
     }
 
     inline void dilation(mask& m)
     {
-        m.operate([](pixels& op, pixel& np)
+        void (*func)(pixels& op, pixel& np) = [](pixels& op, pixel& np)
         {
             constexpr int filter[3][3] = {{  1,  1,  1},
                                           {  1,  1,  1},
@@ -615,7 +549,9 @@ namespace ppfis
                             value = 255;
                 }
             np = value;
-        });
+        };
+
+        m.operate(func);
     }
 
     inline void opening(mask& m)

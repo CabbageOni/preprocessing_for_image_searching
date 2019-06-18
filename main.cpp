@@ -46,8 +46,9 @@ int main(int argc, char** argv)
 void built_in_function_examples(mask& m)
 {
     m.set_relative_border(0,0,0,0);
-    threshold(m, 184);
-    closing(m);
+    m.set_thread_count(4);
+    median_filter(m, 10);
+    otsu_threshold(m);
 }
 
 void simple_thread_exmaples()
