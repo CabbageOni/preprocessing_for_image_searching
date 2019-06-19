@@ -1,4 +1,5 @@
 #include "ROI_img.h"
+#include "ppfis.h"
 using namespace std;
 
 RE_Matching func(cv::Point matchLoc, cv::Mat temp, double Max_Score, int index) {
@@ -116,24 +117,36 @@ RE_Matching ROI_Temp_img(cv::Mat img, cv::Mat templ)
 }
 
 // Image_Processing (Gray + LUT(Brightness) + OTSU_Threshold + Opening_Filter)
-bool Image_Processing(cv::Mat & temp1_T, cv::Mat & Proc_temp1_T, float gamma)
+void Image_Processing(cv::Mat & temp1_T, float gamma)
 {
+	using namespace ppfis;
+
+	mask m(&temp1_T.data, temp1_T.rows, temp1_T.cols);
+	m.set_thread_count(0); //run on no thread
+
 	// Gray Image
-	cv::cvtColor(temp1_T, Proc_temp1_T, cv::COLOR_RGB2GRAY);
+	grayscale(m);
 
 	// simple brightness, light and shade adjustment
-	Proc_temp1_T.convertTo(Proc_temp1_T, -1, 1, 6);
+	void (*brightness_func)(pixel& p) = [](pixel& p)
+	{
+		constexpr uchar brightness = 6;
+
+		p.r = std::max(p.r + brightness, 255);
+		p.g = std::max(p.g + brightness, 255);
+		p.b = std::max(p.b + brightness, 255);
+	};
+	m.operate(brightness_func);
+
 	cv::Mat lookUpTable(1, 256, CV_8U);
 	uchar* p = lookUpTable.ptr();
 	for (int i = 0; i < 256; ++i)
-		p[i] = cv::saturate_cast<uchar>(pow(i / 255.0, gamma) * 255.0);
-	LUT(Proc_temp1_T, lookUpTable, Proc_temp1_T);
+		p[i] = cv::saturate_cast<uchar>(pow(i / 255.0, gamma) * 255.0); // generting this lookup table every time seems redundant!
+	LUT(temp1_T, lookUpTable, temp1_T);
 	
 	// OTSU_Threshold 
-	cv::Mat kernel_1(3, 3, CV_8U, cv::Scalar(1));
-	cv::threshold(Proc_temp1_T, Proc_temp1_T, 127, 255, cv::THRESH_BINARY + cv::THRESH_OTSU);
+	otsu_threshold(m);
 
 	// Opening_Filtering
-	cv::morphologyEx(Proc_temp1_T, Proc_temp1_T, cv::MORPH_OPEN, kernel_1);
-	return 0;
+	opening(m);
 }

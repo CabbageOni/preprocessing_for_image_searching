@@ -17,4 +17,4 @@ typedef struct {
 }RE_Matching;
 
 RE_Matching ROI_Temp_img(cv::Mat img, cv::Mat templ);
-bool Image_Processing(cv::Mat & temp1_T, cv::Mat & Proc_temp1_T, float gamma);
+void Image_Processing(cv::Mat & temp1_T, float gamma);

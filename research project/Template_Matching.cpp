@@ -12,14 +12,14 @@ using namespace cv;
 using namespace ppfis;
 
 // successful run count 
-int index = 0;
+int run_index = 0;
 
 // Image
 Mat img;
 Mat img_display;
 
 // Templete_Image
-Mat templ, Proc_temp1_T;
+Mat templ;
 
 // Video Output
 VideoWriter Video_output;
@@ -28,41 +28,8 @@ VideoWriter Video_output;
 const char* image_window = "Source Image";
 const char* result_window = "Result window";
 
-//void MatchingMethod(int, void*);
-void built_in_function_examples(mask& m);
-void simple_thread_exmaples();
-
-void built_in_function_examples(mask& m)
-{
-	m.set_relative_border(0, 0, 100, 100);
-	m.set_relative_border(50, 50, 50, 50);
-}
-
 int main(int argc, char** argv)
 {
-	if (argc != 2)
-	{
-		std::cout << "usage: " << argv[0] << " <Image_Path>" << endl;
-		return -1;
-	}
-
-	Mat image;
-	image = imread(argv[1]);
-
-	if (image.empty())
-	{
-		std::cout << "image file " << argv[1] << " could not be opened." << endl;
-		return -1;
-	}
-
-	int width = image.rows, height = image.cols;
-
-	mask m(&image.data, width, height);
-
-	built_in_function_examples(m);
-	cv::imwrite("output.jpg", image);
-
-
 	// Read video and templates
 	VideoCapture cap1("../../Data/Video.avi");
 	if (!cap1.isOpened())
@@ -84,7 +51,7 @@ int main(int argc, char** argv)
 
 	///==========================================================================================
 	// Image_Processing( templete, output_templete, gamma) 
-	Image_Processing(templ, Proc_temp1_T, gamma);
+	Image_Processing(templ, gamma);
 	// Template processing part.
 	// Template color image with 4 steps (grayscaale -> brightness ->  OTSU_Threshold -> Opening_Filtering)
 	///==========================================================================================
@@ -112,7 +79,7 @@ int main(int argc, char** argv)
 
 			void(*MatchingMethod)(int, int, int, int) = [](int ROI_LEFT_X, int ROI_LEFT_Y, int ROI_RIGHT_X, int ROI_RIGHT_Y)
 			{
-				Mat roiImg, Proc_roiImg, Origin_img;;
+				Mat roiImg, Origin_img;
 				// copy image
 				//Mat img_display, 
 				Mat img_roi;
@@ -139,13 +106,13 @@ int main(int argc, char** argv)
 				///==========================================================================================
 				// Image_Processing(ROI_Image, output_ROI_Image, gamma) 
 				// only operate on ROI (for each video)
-				Image_Processing(roiImg, Proc_roiImg, gamma);
+				Image_Processing(roiImg, gamma);
 				// 4 steps of ROI color image (grayscale -> brightness ->  OTSU_Threshold -> Opening_Filtering)
 				///==========================================================================================
 
 				///==========================================================================================
 				// Original template Matching (image-processed ROI image, image-processed template image) 
-				Temp_Loc_Max = ROI_Temp_img(Proc_roiImg, Proc_temp1_T);
+				Temp_Loc_Max = ROI_Temp_img(roiImg, templ);
 				//std::cout << "score : " << Temp_Loc_Max.Max_score << endl;
 				// calculate score and template point(x,y) output
 				///==========================================================================================
@@ -171,7 +138,7 @@ int main(int argc, char** argv)
 
 					}
 					// matching count computation
-					index++;
+					run_index++;
 				}
 				// save video
 				//Video_output.write(img_display);
