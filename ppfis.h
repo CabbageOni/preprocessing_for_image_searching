@@ -9,7 +9,7 @@ typedef unsigned char uchar;
 namespace ppfis
 {
     // Simple thread managing class
-    template <int max_thread_count = 5, typename ... parameters>
+    template <int max_thread_count, typename ... parameters>
     class simple_thread
     {
     private:
