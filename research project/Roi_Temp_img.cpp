@@ -132,9 +132,9 @@ void Image_Processing(cv::Mat & temp1_T, float gamma)
 	{
 		constexpr uchar brightness = 6;
 
-		p.r = std::max(p.r + brightness, 255);
-		p.g = std::max(p.g + brightness, 255);
-		p.b = std::max(p.b + brightness, 255);
+		p.r = std::min(p.r + brightness, 255);
+		p.g = std::min(p.g + brightness, 255);
+		p.b = std::min(p.b + brightness, 255);
 	};
 	m.operate(brightness_func);
 
